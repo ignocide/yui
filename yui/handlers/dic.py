@@ -1,12 +1,11 @@
-import functools
 import re
-from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
 from lxml.html import fromstring
 
 from ..api import Attachment
+from ..bot import Bot
 from ..box import box
 from ..command import argument, option
 from ..event import Message
@@ -81,7 +80,7 @@ def parse(html: str) -> Tuple[Optional[str], List[Attachment]]:
 @option('--category', '-c', transform_func=choice(list(DICS.keys())),
         default='영어')
 @argument('keyword', nargs=-1, concat=True)
-async def dic(bot, event: Message, loop, category: str, keyword: str):
+async def dic(bot: Bot, event: Message, category: str, keyword: str):
     """
     다음 사전 검색
 
@@ -109,14 +108,7 @@ async def dic(bot, event: Message, loop, category: str, keyword: str):
         async with session.get(url) as res:
             html = await res.text()
 
-    with ProcessPoolExecutor() as ex:
-        redirect, attachments = await loop.run_in_executor(
-            ex,
-            functools.partial(
-                parse,
-                html,
-            ),
-        )
+    redirect, attachments = await bot.run_in_other_process(parse, html)
 
     if redirect:
         await bot.say(

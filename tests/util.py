@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Callable, Dict, List, NamedTuple, Optional
 
 from attrdict import AttrDict
@@ -27,6 +29,7 @@ class FakeBot(Bot):
 
     def __init__(self, config: AttrDict=None) -> None:
         BotLinkedNamespace._bot = self
+        self.loop = asyncio.get_event_loop()
         self.call_queue: List[Call] = []
         self.api = SlackAPI(self)
         self.channels: List[PublicChannel] = []
@@ -35,6 +38,8 @@ class FakeBot(Bot):
         self.users: Dict[UserID, User] = {}
         self.responses: Dict[str, Callable] = {}
         self.config = config
+        self.process_pool_executor = ProcessPoolExecutor()
+        self.thread_pool_executor = ThreadPoolExecutor()
 
     async def call(
         self,

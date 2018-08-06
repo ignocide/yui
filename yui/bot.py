@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import html
 import importlib
 import inspect
@@ -7,7 +8,8 @@ import logging.config
 import re
 import shlex
 import traceback
-from typing import Any, Dict, List, Union
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from typing import Any, Callable, Dict, List, TypeVar, Union
 
 import aiocron
 
@@ -43,6 +45,8 @@ Session = sessionmaker(autocommit=True)
 
 SPACE_RE = re.compile('\s+')
 
+R = TypeVar('R')
+
 
 class BotReconnect(Exception):
     """Exception for reconnect bot"""
@@ -69,6 +73,8 @@ class APICallError(Exception):
 class Bot:
     """Yui."""
 
+    loop: asyncio.AbstractEventLoop
+
     def __init__(
         self,
         config: Config,
@@ -86,7 +92,8 @@ class Bot:
 
         BotLinkedNamespace._bot = self
 
-        self.loop = None
+        self.process_pool_executor = ProcessPoolExecutor()
+        self.thread_pool_executor = ThreadPoolExecutor()
 
         logger.info('connect to DB')
         config.DATABASE_ENGINE = get_database_engine(config)
@@ -179,6 +186,28 @@ class Bot:
             )
             loop.close()
 
+    async def run_in_other_process(
+        self,
+        f: Callable[..., R],
+        *args,
+        **kwargs,
+    ) -> R:
+        return await self.loop.run_in_executor(
+            executor=self.process_pool_executor,
+            func=functools.partial(f, *args, **kwargs),
+        )
+
+    async def run_in_other_thread(
+        self,
+        f: Callable[..., R],
+        *args,
+        **kwargs,
+    ) -> R:
+        return await self.loop.run_in_executor(
+            executor=self.thread_pool_executor,
+            func=functools.partial(f, *args, **kwargs),
+        )
+
     async def call(
         self,
         method: str,
@@ -196,7 +225,17 @@ class Bot:
                     'https://slack.com/api/{}'.format(method),
                     data=form
                 ) as response:
-                    result = await response.json(loads=ujson.loads)
+                    try:
+                        result = await response.json(loads=ujson.loads)
+                    except aiohttp.client_exceptions.ContentTypeError:
+                        raise APICallError(
+                            'fail to call {} with {}'.format(
+                                method, data
+                            ),
+                            status_code=response.status,
+                            result=await response.text(),
+                            headers=response.headers,
+                        )
                     if response.status == 200:
                         return result
                     else:

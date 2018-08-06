@@ -1,8 +1,6 @@
 import asyncio
-import functools
 import logging
 import re
-from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Tuple
 
 from fuzzywuzzy import fuzz
@@ -11,6 +9,7 @@ from lxml.html import fromstring
 
 from sqlalchemy.orm.exc import NoResultFound
 
+from ..bot import Bot
 from ..box import box
 from ..command import argument
 from ..event import ChatterboxSystemStart, Message
@@ -54,7 +53,7 @@ def parse(html: str, selector: str, url_prefix: str) -> List[Tuple[str, str]]:
     return result
 
 
-async def fetch_css_ref(loop, sess):
+async def fetch_css_ref(bot: Bot, sess):
     logger.info(f'fetch css ref start')
 
     ref = fetch_or_create_cache('css', sess)
@@ -64,13 +63,12 @@ async def fetch_css_ref(loop, sess):
         async with session.get(url) as res:
             html = await res.text()
 
-    with ProcessPoolExecutor() as ex:
-        body = await loop.run_in_executor(ex, functools.partial(
-            parse,
-            html,
-            'a[href^=\\/en-US\\/docs\\/Web\\/CSS\\/]',
-            'https://developer.mozilla.org',
-        ))
+    body = await bot.run_in_other_process(
+        parse,
+        html,
+        'a[href^=\\/en-US\\/docs\\/Web\\/CSS\\/]',
+        'https://developer.mozilla.org',
+    )
 
     ref.body = body
     ref.created_at = now()
@@ -81,7 +79,7 @@ async def fetch_css_ref(loop, sess):
     logger.info(f'fetch css ref end')
 
 
-async def fetch_html_ref(loop, sess):
+async def fetch_html_ref(bot: Bot, sess):
     logger.info(f'fetch html ref start')
 
     ref = fetch_or_create_cache('html', sess)
@@ -91,13 +89,12 @@ async def fetch_html_ref(loop, sess):
         async with session.get(url) as res:
             html = await res.text()
 
-    with ProcessPoolExecutor() as ex:
-        body = await loop.run_in_executor(ex, functools.partial(
-            parse,
-            html,
-            'a[href^=\\/en-US\\/docs\\/Web\\/HTML\\/Element\\/]',
-            'https://developer.mozilla.org'
-        ))
+    body = await bot.run_in_other_process(
+        parse,
+        html,
+        'a[href^=\\/en-US\\/docs\\/Web\\/HTML\\/Element\\/]',
+        'https://developer.mozilla.org',
+    )
 
     ref.body = body
     ref.created_at = now()
@@ -128,7 +125,7 @@ def parse_python(html: str) -> List[Tuple[str, str, str]]:
     return result
 
 
-async def fetch_python_ref(loop, sess):
+async def fetch_python_ref(bot: Bot, sess):
     logger.info(f'fetch python ref start')
 
     ref = fetch_or_create_cache('python', sess)
@@ -138,11 +135,10 @@ async def fetch_python_ref(loop, sess):
         async with session.get(url) as res:
             html = await res.text()
 
-    with ProcessPoolExecutor() as ex:
-        body = await loop.run_in_executor(ex, functools.partial(
-            parse_python,
-            html,
-        ))
+    body = await bot.run_in_other_process(
+        parse_python,
+        html,
+    )
 
     ref.body = body
     ref.created_at = now()
@@ -154,24 +150,24 @@ async def fetch_python_ref(loop, sess):
 
 
 @box.on(ChatterboxSystemStart)
-async def on_start(loop, sess):
+async def on_start(bot, sess):
     logger.info('on_start ref')
     tasks = [
-        fetch_css_ref(loop, sess),
-        fetch_html_ref(loop, sess),
-        fetch_python_ref(loop, sess),
+        fetch_css_ref(bot, sess),
+        fetch_html_ref(bot, sess),
+        fetch_python_ref(bot, sess),
     ]
     await asyncio.wait(tasks)
     return True
 
 
 @box.crontab('0 3 * * *')
-async def refresh(loop, sess):
+async def refresh(bot, sess):
     logger.info('refresh ref')
     tasks = [
-        fetch_css_ref(loop, sess),
-        fetch_html_ref(loop, sess),
-        fetch_python_ref(loop, sess),
+        fetch_css_ref(bot, sess),
+        fetch_html_ref(bot, sess),
+        fetch_python_ref(bot, sess),
     ]
     await asyncio.wait(tasks)
 

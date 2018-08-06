@@ -21,6 +21,7 @@ Who do use YUI?
 * item4(owner)'s private slack
 * 9xd
 * xnuk fan club
+* PyJog
 
 
 Requirements
@@ -28,7 +29,7 @@ Requirements
 
 - Git
 - Slack bot permission for bot account
-- Python 3.6 or higher
+- Python 3.7 or higher
 - Pipenv
 
 
@@ -148,6 +149,10 @@ GOOGLE_API_TOKEN
 AQI_API_TOKEN
   string. API Token for using AQI API.
   You can get this value on `this request form`_
+  **Do not** upload this value on VCS.
+
+DNF_API_KEY
+  string. API Key for using Neople API.
   **Do not** upload this value on VCS.
 
 WEBSOCKETDEBUGGERURL
